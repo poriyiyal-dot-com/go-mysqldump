@@ -1,0 +1,39 @@
+{
+    "Database1": {
+        "WhereClause": "Hello",
+        "IncludedTablesRegex": [
+            "AAA",
+            "BBB"
+        ],
+        "ExcludedTablesRegex": [
+            "AAA",
+            "BBB"
+        ],
+        "IncludedTables": [
+            "AAA",
+            "BBB"
+        ],
+        "ExcludedTables": [
+            "AAA",
+            "BBB"
+        ]
+    },
+    "Database2": {
+        "IncludedTablesRegex": [
+            "AAA",
+            "BBB"
+        ],
+        "ExcludedTablesRegex": [
+            "AAA",
+            "BBB"
+        ],
+        "IncludedTables": [
+            "AAA",
+            "BBB"
+        ],
+        "ExcludedTables": [
+            "AAA",
+            "BBB"
+        ]
+    }
+}
