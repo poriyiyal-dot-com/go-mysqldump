@@ -2,10 +2,12 @@ package gomysqldump
 
 import (
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
-	"html/template"
+	"reflect"
 	"strings"
+	"text/template"
 	"time"
 )
 
@@ -24,48 +26,6 @@ type dump struct {
 }
 
 const version = "0.2.2"
-
-const tmpl = `-- Go SQL Dump {{ .DumpVersion }}
---
--- ------------------------------------------------------
--- Server version	{{ .ServerVersion }}
-
-/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
-/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
-/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
-/*!40101 SET NAMES utf8 */;
-/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
-/*!40103 SET TIME_ZONE='+00:00' */;
-/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
-/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
-/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
-/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
-
-
-{{range .Tables}}
---
--- Table structure for table {{ .Name }}
---
-
-DROP TABLE IF EXISTS {{ .Name }};
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-{{ .SQL }};
-/*!40101 SET character_set_client = @saved_cs_client */;
---
--- Dumping data for table {{ .Name }}
---
-
-LOCK TABLES {{ .Name }} WRITE;
-/*!40000 ALTER TABLE {{ .Name }} DISABLE KEYS */;
-{{ if .Values }}
-INSERT INTO {{ .Name }} VALUES {{ .Values }};
-{{ end }}
-/*!40000 ALTER TABLE {{ .Name }} ENABLE KEYS */;
-UNLOCK TABLES;
-{{ end }}
--- Dump completed on {{ .CompleteTime }}
-`
 
 const headerTemplate = `-- Go SQL Dump %s
 -- Backup Started:	%s
@@ -168,7 +128,7 @@ func (d *Dumper) getTablesToBeDumped() ([]string, error) {
 	tables := make([]string, 0)
 
 	// Get table list
-	rows, err := d.db.Query("SHOW TABLES")
+	rows, err := d.db.Query("select TABLE_NAME from information_schema.tables where TABLE_SCHEMA='sakila' AND TABLE_TYPE <> 'VIEW'")
 	if err != nil {
 		return tables, err
 	}
@@ -273,9 +233,21 @@ func createTableSQL(db *sql.DB, name string) (string, error) {
 }
 
 func createTableValues(db *sql.DB, name string) (string, error) {
+	type colType struct {
+		scanType       reflect.Type
+		dbType         string
+		sanitizeString bool
+		sanitizeBlob   bool
+	}
+	colTypeMap := map[int]colType{}
+
+	fmt.Println("SELECT * FROM " + name)
+
 	// Get Data
 	rows, err := db.Query("SELECT * FROM " + name)
 	if err != nil {
+		fmt.Println("ERORR")
+		fmt.Println(err)
 		return "", err
 	}
 	defer rows.Close()
@@ -283,11 +255,45 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 	// Get columns
 	columns, err := rows.Columns()
 	if err != nil {
+		fmt.Println("ERORR")
 		return "", err
 	}
 	if len(columns) == 0 {
+		fmt.Println("ERORR")
 		return "", errors.New("No columns in table " + name + ".")
 	}
+
+	colTypes, err := rows.ColumnTypes()
+	if err != nil {
+		fmt.Println("ERORR")
+		return "", err
+	}
+
+	fmt.Println("Col Types:", colTypes)
+
+	for i, ct := range colTypes {
+		sanitizeString := false
+		sanitizeBlob := false
+
+		fmt.Println(ct.DatabaseTypeName())
+
+		if ct.DatabaseTypeName() == "BLOB" || ct.DatabaseTypeName() == "GEOMETRY" {
+			sanitizeBlob = true
+		}
+
+		if ct.DatabaseTypeName() == "VARCHAR" {
+			sanitizeString = true
+		}
+
+		colTypeMap[i] = colType{
+			scanType:       ct.ScanType(),
+			dbType:         ct.DatabaseTypeName(),
+			sanitizeBlob:   sanitizeBlob,
+			sanitizeString: sanitizeString,
+		}
+	}
+
+	fmt.Println(colTypeMap)
 
 	// Read data
 	data_text := make([]string, 0)
@@ -309,10 +315,31 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 		}
 
 		dataStrings := make([]string, len(columns))
+		index := -1
 
 		for key, value := range data {
+			index++
+			sanitizeString := colTypeMap[index].sanitizeString
+			sanitizeBlob := colTypeMap[index].sanitizeBlob
+
 			if value != nil && value.Valid {
-				dataStrings[key] = "'" + value.String + "'"
+				if sanitizeString == true {
+					dataStrings[key] = "'" + value.String + "'"
+				} else if sanitizeBlob == true {
+					// fmt.Println(value.String)
+					dataStrings[key] = "null"
+
+					src := []byte(value.String)
+					dst := make([]byte, hex.EncodedLen(len(src)))
+					hex.Encode(dst, src)
+
+					fmt.Printf("%s\n", dst)
+
+					dataStrings[key] = "x'" + string(dst) + "'"
+				} else {
+					dataStrings[key] = "'" + value.String + "'"
+				}
+
 			} else {
 				dataStrings[key] = "null"
 			}

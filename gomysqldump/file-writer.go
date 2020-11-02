@@ -3,10 +3,10 @@ package gomysqldump
 import (
 	"bufio"
 	"fmt"
-	"html/template"
 	"os"
 	"path/filepath"
 	"sync"
+	"text/template"
 )
 
 // FileWriter Object
@@ -53,6 +53,8 @@ func (fw *FileWriter) WriteContent(content string) {
 // WriteTemplatedContent - Write File content to file
 func (fw *FileWriter) WriteTemplatedContent(template *template.Template, vars TemplateVars) {
 	fw.mux.Lock()
+
+	fmt.Println("Writing Data:", fw.fullPath)
 
 	f, err := os.OpenFile(fw.fullPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {

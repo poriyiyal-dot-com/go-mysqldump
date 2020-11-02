@@ -4,9 +4,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"io/ioutil"
 	"os"
+	"text/template"
 
 	// MySQL Driver
 	_ "github.com/go-sql-driver/mysql"
