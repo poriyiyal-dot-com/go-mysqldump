@@ -333,8 +333,6 @@ func createTableValues(db *sql.DB, name string) (string, error) {
 					dst := make([]byte, hex.EncodedLen(len(src)))
 					hex.Encode(dst, src)
 
-					fmt.Printf("%s\n", dst)
-
 					dataStrings[key] = "x'" + string(dst) + "'"
 				} else {
 					dataStrings[key] = "'" + value.String + "'"
